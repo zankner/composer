@@ -66,6 +66,7 @@ __all__ = [
     'initialize_dist',
     'is_available',
     'is_initialized',
+    'scatter',
 ]
 
 log = logging.getLogger(__name__)
@@ -268,6 +269,33 @@ def broadcast_object_list(object_list: List[Any], src: int = 0) -> None:
         # or will just be None on non-rank-0
         return
     world_size = get_world_size()
+    if world_size == 1:
+        return
+    raise RuntimeError(f'The world_size({world_size}) > 1, but the distributed package is not '
+                       'available or has not been initialized. Please check you have initialized '
+                       'the distributed runtime and that PyTorch has been built with distributed '
+                       'support. If calling this function outside Trainer, please ensure that '
+                       '`composer.utils.dist.initialize_dist` has been called first.')
+
+
+def scatter(tensor: torch.Tensor, scatter_list: List[torch.Tensor], src: int) -> None:
+    """Scatter a list of tensors to the whole group.
+
+    ``tensor`` must have the same number of elements in all processes participating in the collective.
+    See :func:`torch.distributed.scatter`.
+
+    Args:
+        tensor (torch.Tensor): Tensor to be used to save received data otherwise.
+        scatter_list (torch.Tensor): List of data to be scattered if ``src`` is the rank of current process,
+        src (int): Source rank
+    """
+    if dist.is_available() and dist.is_initialized():
+        if dist.get_global_rank() == src:
+            dist.scatter(tensor, scatter_list=scatter_list, src=src)
+        else:
+            dist.scatter(tensor, scatter_list=[], src=src)
+        return
+    world_size = dist.get_world_size()
     if world_size == 1:
         return
     raise RuntimeError(f'The world_size({world_size}) > 1, but the distributed package is not '
